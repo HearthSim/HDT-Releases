@@ -1,1 +1,1 @@
-HDT Release 1.0.4
+HDT Release 1.0.5
