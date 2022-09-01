@@ -1,1 +1,1 @@
-HDT Release v1.18.17
+HDT Release v1.18.18
