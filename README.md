@@ -1,1 +1,5 @@
-HDT Release v1.18.27
+# HDT-Releases
+
+This repository contains releases with the update files used by [Hearthstone Deck Tracker](https://github.com/HearthSim/Hearthstone-Deck-Tracker).
+
+## Download here: https://hsreplay.net/downloads/
