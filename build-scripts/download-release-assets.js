@@ -36,29 +36,42 @@ function fetchLatest(repo) {
 	);
 }
 
-function downloadFile(repo, file) {
+function downloadFile(repo, file, { optional = false } = {}) {
 	console.log(`Downloading ${file}...`);
 
-	function get(url, resolve) {
+	function get(url, resolve, reject) {
 		http.get(url, (res) => {
 			if (res.statusCode === 301 || res.statusCode === 302) {
-				return get(res.headers.location, resolve);
+				res.resume();
+				return get(res.headers.location, resolve, reject);
 			}
-			resolve(res);
-		});
+			if (res.statusCode === 404 && optional) {
+				res.resume();
+				console.log(`${file} does not exist, skipping`);
+				return resolve();
+			}
+			if (res.statusCode !== 200) {
+				res.resume();
+				return reject(
+					new Error(`Downloading ${file} failed with status ${res.statusCode}`)
+				);
+			}
+			res
+				.pipe(fs.createWriteStream(`${assetsDir}/${file}`))
+				.on("finish", resolve)
+				.on("error", reject);
+		}).on("error", reject);
 	}
 
-	return new Promise((resolve) => {
+	return new Promise((resolve, reject) => {
 		get(
 			{
 				host: "github.com",
 				path: `/HearthSim/${repo}/releases/download/${tagName}/${file}`,
 				headers: { "User-Agent": "request" },
 			},
-			(res) => {
-				res.on("end", resolve);
-				res.pipe(fs.createWriteStream(`${assetsDir}/${file}`));
-			}
+			resolve,
+			reject
 		);
 	});
 }
@@ -74,10 +87,13 @@ async function run() {
 
 	const version = tagName.slice(1);
 	await downloadFile("HDT-Releases", "RELEASES");
+	await downloadFile("HDT-Releases", "releases.win.json");
 	await downloadFile("HDT-Releases", "HDT-Installer.exe");
+	// there is nothing to build a delta against on the first Velopack release
 	await downloadFile(
 		"HDT-Releases",
-		`HearthstoneDeckTracker-${version}-delta.nupkg`
+		`HearthstoneDeckTracker-${version}-delta.nupkg`,
+		{ optional: true }
 	);
 	await downloadFile(
 		"HDT-Releases",
