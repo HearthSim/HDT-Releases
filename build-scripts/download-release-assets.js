@@ -2,6 +2,8 @@ const http = require("https");
 const fs = require("fs");
 
 const assetsDir = `${__dirname}/../tmp_asset_downloads`;
+// synced to a sub-path of the bucket, see SquirrelConnection.SquirrelRemoteUrls in HDT
+const velopackAssetsDir = `${assetsDir}/velopack`;
 
 const tagName = process.argv[2];
 
@@ -15,9 +17,7 @@ if (!/v\d+\.\d+\.\d+/.test(tagName)) {
 	process.exit(1);
 }
 
-if (!fs.existsSync(assetsDir)) {
-	fs.mkdirSync(assetsDir);
-}
+fs.mkdirSync(velopackAssetsDir, { recursive: true });
 
 function fetchLatest(repo) {
 	return new Promise((resolve) =>
@@ -36,8 +36,8 @@ function fetchLatest(repo) {
 	);
 }
 
-function downloadFile(repo, file, { optional = false } = {}) {
-	console.log(`Downloading ${file}...`);
+function downloadFile(repo, file, { dir = assetsDir, optional = false } = {}) {
+	console.log(`Downloading ${file} from ${repo}...`);
 
 	function get(url, resolve, reject) {
 		http.get(url, (res) => {
@@ -57,7 +57,7 @@ function downloadFile(repo, file, { optional = false } = {}) {
 				);
 			}
 			res
-				.pipe(fs.createWriteStream(`${assetsDir}/${file}`))
+				.pipe(fs.createWriteStream(`${dir}/${file}`))
 				.on("finish", resolve)
 				.on("error", reject);
 		}).on("error", reject);
@@ -84,20 +84,40 @@ async function run() {
 			`Latest Squirrel release (${sqRelease.tag_name}) does not match ${tagName}`
 		);
 	}
+	// the Velopack release has to be published before the Squirrel one
+	const vpRelease = await fetchLatest("HDT-Velopack-Releases");
+	if (vpRelease.tag_name !== tagName) {
+		throw new Error(
+			`Latest Velopack release (${vpRelease.tag_name}) does not match ${tagName}`
+		);
+	}
 
 	const version = tagName.slice(1);
 	await downloadFile("HDT-Releases", "RELEASES");
-	await downloadFile("HDT-Releases", "releases.win.json");
 	await downloadFile("HDT-Releases", "HDT-Installer.exe");
-	// there is nothing to build a delta against on the first Velopack release
 	await downloadFile(
 		"HDT-Releases",
-		`HearthstoneDeckTracker-${version}-delta.nupkg`,
-		{ optional: true }
+		`HearthstoneDeckTracker-${version}-delta.nupkg`
 	);
 	await downloadFile(
 		"HDT-Releases",
 		`HearthstoneDeckTracker-${version}-full.nupkg`
+	);
+
+	const velopack = { dir: velopackAssetsDir };
+	await downloadFile("HDT-Velopack-Releases", "releases.win.json", velopack);
+	await downloadFile("HDT-Velopack-Releases", "RELEASES", velopack);
+	await downloadFile("HDT-Velopack-Releases", "HDT-Installer.exe", velopack);
+	// there is nothing to build a delta against on the first Velopack release
+	await downloadFile(
+		"HDT-Velopack-Releases",
+		`HearthstoneDeckTracker-${version}-delta.nupkg`,
+		{ ...velopack, optional: true }
+	);
+	await downloadFile(
+		"HDT-Velopack-Releases",
+		`HearthstoneDeckTracker-${version}-full.nupkg`,
+		velopack
 	);
 	console.log("Done.");
 }
