@@ -11,13 +11,20 @@ jobs:
   finalize:
     runs-on: ubuntu-latest
 
+    env:
+      TAG_NAME: ${{ github.event.release.tag_name }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+      SENTRY_ENVIRONMENT: Squirrel
+
     steps:
       # the release itself is created by the Squirrel build in Hearthstone-Deck-Tracker, which composes
       # the name from AssemblyName and VersionPrefix. The tag here carries the same version, prefixed.
       - name: Finalize Sentry Release
         run: npx @sentry/cli@2 releases finalize "HearthstoneDeckTracker@${TAG_NAME#v}"
+
+      - name: Create Sentry Deploy
+        run: npx @sentry/cli@2 deploys new --release "HearthstoneDeckTracker@${TAG_NAME#v}" --env "$SENTRY_ENVIRONMENT" --url "$RELEASE_URL"
         env:
-          TAG_NAME: ${{ github.event.release.tag_name }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
