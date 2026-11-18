@@ -1,6 +1,7 @@
 const http = require("https");
 const fs = require("fs");
 
+const repo = "HDT-Releases";
 const assetsDir = `${__dirname}/../tmp_asset_downloads`;
 
 const tagName = process.argv[2];
@@ -19,7 +20,7 @@ if (!fs.existsSync(assetsDir)) {
 	fs.mkdirSync(assetsDir);
 }
 
-function fetchLatest(repo) {
+function fetchLatest() {
 	return new Promise((resolve) =>
 		http.get(
 			{
@@ -36,7 +37,7 @@ function fetchLatest(repo) {
 	);
 }
 
-function downloadFile(repo, file) {
+function downloadFile(file, { optional = false } = {}) {
 	console.log(`Downloading ${file}...`);
 
 	function get(url, resolve) {
@@ -48,7 +49,7 @@ function downloadFile(repo, file) {
 		});
 	}
 
-	return new Promise((resolve) => {
+	return new Promise((resolve, reject) => {
 		get(
 			{
 				host: "github.com",
@@ -56,6 +57,16 @@ function downloadFile(repo, file) {
 				headers: { "User-Agent": "request" },
 			},
 			(res) => {
+				if (res.statusCode !== 200) {
+					res.resume();
+					if (optional && res.statusCode === 404) {
+						console.log(`Skipping ${file} (not found)`);
+						return resolve();
+					}
+					return reject(
+						new Error(`Failed to download ${file}: HTTP ${res.statusCode}`)
+					);
+				}
 				res.on("end", resolve);
 				res.pipe(fs.createWriteStream(`${assetsDir}/${file}`));
 			}
@@ -65,24 +76,23 @@ function downloadFile(repo, file) {
 
 async function run() {
 	console.log(`Verifying ${tagName} matches latest releases...`);
-	const sqRelease = await fetchLatest("HDT-Releases");
-	if (sqRelease.tag_name !== tagName) {
+	const latestRelease = await fetchLatest();
+	if (latestRelease.tag_name !== tagName) {
 		throw new Error(
-			`Latest Squirrel release (${sqRelease.tag_name}) does not match ${tagName}`
+			`Latest release (${latestRelease.tag_name}) does not match ${tagName}`
 		);
 	}
 
 	const version = tagName.slice(1);
-	await downloadFile("HDT-Releases", "RELEASES");
-	await downloadFile("HDT-Releases", "HDT-Installer.exe");
-	await downloadFile(
-		"HDT-Releases",
-		`HearthstoneDeckTracker-${version}-delta.nupkg`
-	);
-	await downloadFile(
-		"HDT-Releases",
-		`HearthstoneDeckTracker-${version}-full.nupkg`
-	);
+	await downloadFile("releases.win.json");
+	// legacy feed for Squirrel clients migrating to Velopack
+	await downloadFile("RELEASES");
+	await downloadFile("HDT-Installer.exe");
+	// vpk skips the delta when there is no previous release to build it against
+	await downloadFile(`HearthstoneDeckTracker-${version}-delta.nupkg`, {
+		optional: true,
+	});
+	await downloadFile(`HearthstoneDeckTracker-${version}-full.nupkg`);
 	console.log("Done.");
 }
 
