@@ -21,17 +21,29 @@ if (!fs.existsSync(assetsDir)) {
 }
 
 function fetchLatest() {
-	return new Promise((resolve) =>
+	return new Promise((resolve, reject) =>
 		http.get(
 			{
 				host: "api.github.com",
 				path: `/repos/HearthSim/${repo}/releases/latest`,
-				headers: { "User-Agent": "request" },
+				headers: {
+					"User-Agent": "request",
+					Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+				},
 			},
 			(res) => {
 				let json = "";
 				res.on("data", (data) => (json += data));
-				res.on("end", () => resolve(JSON.parse(json)));
+				res.on("end", () => {
+					if (res.statusCode !== 200) {
+						return reject(
+							new Error(
+								`Failed to fetch the latest release: HTTP ${res.statusCode} ${json}`
+							)
+						);
+					}
+					resolve(JSON.parse(json));
+				});
 			}
 		)
 	);
